@@ -1,0 +1,94 @@
+##############################################################################
+# Local Development Stack
+#
+# Usage:
+#   docker compose up          — start all services
+#   docker compose up -d       — detached mode
+#   docker compose logs -f app — follow app logs
+##############################################################################
+
+version: "3.9"
+
+services:
+  # ─── PostgreSQL ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ideahub
+      POSTGRES_PASSWORD: ideahub
+      POSTGRES_DB: ideahub
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ideahub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ───────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+
+  # ─── Ollama (local AI models) ────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu] # optional: enable if you have a GPU
+
+  # ─── Next.js App ─────────────────────────────────────────────────
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://ideahub:ideahub@postgres:5432/ideahub
+      REDIS_URL: redis://redis:6379
+      AI_BASE_URL: http://ollama:11434/v1
+      AI_API_KEY: not-needed-for-ollama
+      AI_MODEL: llama3.1:8b
+      JWT_SECRET: dev-secret-change-me
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── Agent Worker ────────────────────────────────────────────────
+  worker:
+    build: .
+    command: ["node", "dist/services/agent-worker.js"]
+    environment:
+      DATABASE_URL: postgresql://ideahub:ideahub@postgres:5432/ideahub
+      REDIS_URL: redis://redis:6379
+      AI_BASE_URL: http://ollama:11434/v1
+      AI_API_KEY: not-needed-for-ollama
+      AI_MODEL: llama3.1:8b
+      AGENT_SANDBOX_MODE: local
+      AGENT_MAX_CONCURRENT: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  ollama_data:
+
+networks:
+  default:
+    name: agent-net

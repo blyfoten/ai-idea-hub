@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ───────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  avatarUrl     String?
+  credits       Float    @default(5.0) // $5 free credits on signup
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ideas         Idea[]
+  investments   Investment[]
+  transactions  CreditTransaction[]
+
+  @@map("users")
+}
+
+// ─── Ideas ───────────────────────────────────────────────────────────
+
+enum IdeaStatus {
+  DRAFT
+  VALIDATING
+  VALIDATED
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+model Idea {
+  id              String     @id @default(cuid())
+  title           String
+  description     String
+  tags            String[]   @default([])
+  status          IdeaStatus @default(DRAFT)
+
+  // AI-generated fields
+  marketResearch  Json?
+  competitors     Json?
+  technicalPlan   Json?
+  repoStructure   Json?
+
+  // Embedding for semantic search (stored as float array)
+  embedding       Float[]    @default([])
+
+  // Relationships
+  authorId        String
+  author          User       @relation(fields: [authorId], references: [id])
+  investments     Investment[]
+  agentJobs       AgentJob[]
+
+  totalInvested   Float      @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([authorId])
+  @@index([status])
+  @@map("ideas")
+}
+
+// ─── Investments (credits staked on ideas) ───────────────────────────
+
+model Investment {
+  id        String   @id @default(cuid())
+  amount    Float
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  ideaId    String
+  idea      Idea     @relation(fields: [ideaId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([ideaId])
+  @@map("investments")
+}
+
+// ─── Credit transactions ─────────────────────────────────────────────
+
+enum TransactionType {
+  SIGNUP_BONUS
+  PURCHASE
+  INVESTMENT
+  AGENT_USAGE
+  REFUND
+  PLATFORM_FEE
+}
+
+model CreditTransaction {
+  id          String          @id @default(cuid())
+  amount      Float           // positive = credit, negative = debit
+  type        TransactionType
+  description String?
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  createdAt   DateTime        @default(now())
+
+  @@index([userId])
+  @@map("credit_transactions")
+}
+
+// ─── Agent Jobs (sandboxed AI work) ──────────────────────────────────
+
+enum JobStatus {
+  QUEUED
+  PROVISIONING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum JobType {
+  MARKET_RESEARCH
+  COMPETITOR_ANALYSIS
+  TECHNICAL_ROADMAP
+  CODE_GENERATION
+  PROTOTYPE
+  DOCUMENTATION
+  TESTING
+}
+
+model AgentJob {
+  id            String    @id @default(cuid())
+  type          JobType
+  status        JobStatus @default(QUEUED)
+  model         String    @default("llama3.1:8b") // which OS model to use
+  prompt        String
+  result        Json?
+  logs          String[]  @default([])
+  creditsUsed   Float     @default(0)
+
+  // Cloud sandbox info
+  containerId   String?
+  sandboxUrl    String?
+
+  ideaId        String
+  idea          Idea      @relation(fields: [ideaId], references: [id])
+
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([ideaId])
+  @@index([status])
+  @@map("agent_jobs")
+}

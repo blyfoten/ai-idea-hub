@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground: #0a0a0a;
+  --background: #fafafa;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+@layer utilities {
+  .gradient-brand {
+    background: linear-gradient(135deg, #4263eb 0%, #5c7cfa 50%, #748ffc 100%);
+  }
+  .gradient-dark {
+    background: linear-gradient(135deg, #1a1b3a 0%, #0f172a 100%);
+  }
+}
